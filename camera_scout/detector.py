@@ -1,7 +1,7 @@
 import subprocess
 import json
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, TypedDict
 from pathlib import Path
 
 
@@ -16,26 +16,26 @@ class CameraResearcher:
         :param config_path: Path to JSON file with camera type definitions
         """
 
-        self.NO_CAM_FOUND = False
-        self.config = self._load_config(config_path)
-        self.codec_preferences = {"cam": "MJPG", "termal": "YUYV"}
-        self.camera_stacks: Optional[List]
-        self.detailed_info: Optional[List]
+        self.__NO_CAM_FOUND: bool = False
+        self.__config = self._load_config(config_path)
+        self.__codec_preferences = {"cam": "MJPG", "termal": "YUYV"}
+        self._detailed_info: Optional[List]
+        self._camera_stacks_by_group: Optional[List]
 
         self._discover_cameras()
-        if visualize and not self.NO_CAM_FOUND:
+        if visualize and not self.__NO_CAM_FOUND:
             self._draw_detailed_info()
 
     def _load_config(self, path_json: str) -> Dict:
         """Load camera type configuration from JSON file"""
         try:
-            global_path = path_json
+
             search_paths = [
                 Path(path_json),
+                Path(f"camera_scout/{path_json}"),
                 Path(__file__).parent / path_json,
                 Path(__file__).parent / "camera_scout/" / path_json,
                 Path.cwd() / path_json,
-                Path(f"camera_scout/{path_json}"),
             ]
 
             for path in search_paths:
@@ -45,22 +45,23 @@ class CameraResearcher:
 
             with open(global_path, "r") as f:
                 return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
+
+        except (FileNotFoundError, json.JSONDecodeError, UnboundLocalError) as e:
             raise RuntimeError(
-                f"Failed to load camera config: check path to reference/base_cam_in_company.json"
+                f"Failed to load camera config: check path to {path_json})"
             )
 
     def _discover_cameras(self) -> None:
         """Discover all available cameras and analyze their capabilities"""
-        self.detailed_info = self._get_detailed_info()
-        if not self.detailed_info:
-            self.NO_CAM_FOUND = True
+        self._detailed_info = self._get_detailed_info()
+        if not self._detailed_info:
+            self.__NO_CAM_FOUND = True
             print("No cameras detected\n")
             return
 
         self._get_cam_type()
         self._get_best_cam_param()
-        self.camera_stacks = self._group_cameras_by_type()
+        self._camera_stacks_by_group = self._group_cameras_by_type()
 
     def _get_detailed_info(self) -> Optional[List]:
         """Получение и парсинг информации о камерах"""
@@ -108,8 +109,8 @@ class CameraResearcher:
 
     def _get_cam_type(self):
         """Find cam type from json"""
-        for device in self.detailed_info:
-            device["type"] = self._find_type(device["name"], self.config)
+        for device in self._detailed_info:
+            device["type"] = self._find_type(device["name"], self.__config)
 
     def _find_type(self, cam_name: str, fcc_data: json) -> str:
         """Search simulars betwen json and cam name"""
@@ -121,11 +122,11 @@ class CameraResearcher:
 
     def _get_best_cam_param(self):
         """find best paramerts for all find cam"""
-        for device in self.detailed_info:
+        for device in self._detailed_info:
             if device["type"] == "realsense" or device["type"] == "":
                 continue
 
-            cam_codec = self.codec_preferences[device["type"]]
+            cam_codec = self.__codec_preferences[device["type"]]
             main_path = device["paths"][0]
             cam_id = int(main_path[-1])
 
@@ -158,7 +159,7 @@ class CameraResearcher:
                     current_res = None
                     continue
 
-                # Фильтруем только нужные форматы
+                # Фильтруем только нужные
                 if current_format not in {cam_codec}:
                     continue
 
@@ -189,8 +190,8 @@ class CameraResearcher:
     def _draw_detailed_info(self) -> None:
         """Draw all usb cameras specifics"""
         print("Cam info:")
-        if self.detailed_info:
-            for device in self.detailed_info:
+        if self._detailed_info:
+            for device in self._detailed_info:
                 print(f"• {device['name']}")
                 print(f"• Cam type: {device['type']}")
                 for path in device["paths"]:
@@ -211,7 +212,7 @@ class CameraResearcher:
         """Группирует камеры по типам в стекоподобную структуру"""
         stacks = {"termal": [], "cam": [], "realsense": []}
 
-        for camera in self.detailed_info:
+        for camera in self._detailed_info:
             camera_type = camera["type"]
             stacks[camera_type].append(camera)
 
@@ -222,15 +223,17 @@ class CameraResearcher:
         return stacks
 
     def get_camera(self, cam_type):
+        camera_data = None
+
+        if self.__NO_CAM_FOUND:
+            print(f"CameraResearcher not found {cam_type} in system")
+            return camera_data
+
         try:
-            camera_data = self.camera_stacks[cam_type].pop()
+            camera_data = self._camera_stacks_by_group[cam_type].pop()
             print(f"Sucess!")
         except IndexError:
-            camera_data = None
             print(f"You get all possible {cam_type}")
-        except:
-            camera_data = None
-            print(f"Not found {cam_type} in system")
 
         return camera_data
 

@@ -1,16 +1,14 @@
 {
-    "cam" : [
+    "cam": [
         "HD webcam",
         "spectrum camera",
         "webcam"
     ],
-
-    "termal":[
+    "termal": [
         "mino17",
         "termal"
     ],
-
-    "realsense":[
+    "realsense": [
         "Intel(R)",
         "RealSense(TM) Depth",
         "realsense"
